@@ -1,0 +1,21 @@
+[
+    {
+        "hash": "26352bd9bf90e8f005df70e845507ebc",
+        "conversation": [
+            {
+                "prompt": {
+                    "role": "user",
+                    "content": "📄 types.ts\n\nexport interface Deliverable {\n  id: number\n  title: string;\n  description: string;\n  completed: boolean;\n  tasks: Task[];\n}\n\n// An interface representing a task object\nexport interface Task {\n  id: number;\n  deliverableId: number;\n  title: string;\n  description: string;\n  completed: boolean;\n  steps: Step[];\n}\n\n// An interface representing a step object (a subtask)\nexport interface Step {\n  title: string;\n  completed: boolean;\n}\n\nexport interface Message {\n  role: string;\n  content: string;\n}\n\nexport interface Conversation {\n  messages: Message[];\n  settings: LLMSettings;\n}\n\nexport interface LLMSettings {\n  key: string;\n  temperature?: number;\n  maxTokens?: number;\n  topP?: number;\n  frequencyPenalty?: number;\n}\n\nexport interface LLMSettingsMapping {\n  [key: string]: LLMSettings;\n}\n\nexport interface LLMHistoryEntry {\n  prompt: Message;\n  response: Message;\n  settings: LLMSettings;\n}\n\nexport interface LLMHistoryManager {\n  getConversationHistory(): LLMHistoryEntry[];\n  setConversationHistory(history: LLMHistoryEntry[]): void;\n}\n\nexport interface LLMSession extends Conversation {\n  llm: LLM;\n}\n\nexport interface LLM {\n  settings: LLMSettings;\n  history: LLMHistoryEntry[];\n}\n\nexport interface LLMCoreInterface {\n  name: string;\n  sendRequest(request: Conversation): Promise<Conversation>;\n  streamRequest(request: Conversation, onUpdate: (response: Message) => void, onEnd: () => void): void;\n  configure(settings: object): void;\n  registerHistory(historyEntry: object): void;\n}\n\nexport interface GPTChatMessage {\n  role: 'user' | 'assistant' | 'system';\n  content: string;\n}\n\nexport interface GPTChatConversation {\n  model: string;\n  messages: GPTChatMessage[];\n  max_tokens?: number;\n  top_p?: number;\n  temperature?: number;\n  stream?: boolean;\n  apikey?: string;\n}\n"
+                },
+                "response": "📄 README.md\n```\n# VSCode Extension\n\nThis extension provides an interface to interact with a code enhancement and bug fix agent. It allows users to ask questions and receive suggestions for code changes directly within their editor.\n\n## Features\n\n- Terminal interface for interacting with the agent.\n- Animated progress bar during processing.\n- Support for managing project files and settings.\n- Auto-update code based on agent suggestions (toggleable).\n\n## Usage\n\n1. Install the extension in VSCode.\n2. Open the command palette (Ctrl+Shift+P) and search for \"Project Source Code update agent\".\n3. Select the command to open the terminal interface.\n4. Type your questions or requests in the terminal, and the agent will provide suggestions for code updates.\n5. Use the various commands available in the terminal to manage the project files and settings.\n\n## Commands\n\n- `clear` - Clear the terminal.\n- `reset` - Reset the conversation with the agent.\n- `open` - Set file buffer to open VSCode files.\n- `all` - Reset the project files to all files.\n- `list` - List all project files.\n- `summary` - Show summary information.\n- `load <path>` - Load a project from a different path.\n- `add <path>` - Add a file or directory to the project.\n- `addopen` - Add all open files to the project.\n- `remove <path>` - Remove a file from the project.\n- `tokens <num>` - Set the number of tokens to generate.\n- `*` - Toggle auto-updates.\n- `help` - Show help.\n\n```\n\n📢 extension.ts Updated extension.ts to include the new README.md content and features.\n\n📢 parsed-prompt.ts No changes made.\n\n📢 types.ts No changes made.",
+                "settings": {
+                    "key": "test",
+                    "temperature": 0.7,
+                    "maxTokens": 2048,
+                    "topP": 1
+                }
+            }
+        ],
+        "count": 1
+    }
+]
