@@ -323,15 +323,17 @@ export function activate(context: vscode.ExtensionContext) {
                         return;
                     }
                     const fileChanges = result.fileChanges;
-                    const changedFileNames = Object.keys(fileChanges);
-                    if (changedFileNames.length > 0) {
-                        if (performUpdates) writeEmitter.fire(`\r\nperformed ${changedFileNames.length} file updates:\r\n`);
-                        else writeEmitter.fire(`\r\suggesting ${changedFileNames.length} file updates:\r\n`);
-                        for (const fileName of changedFileNames) {
-                            writeEmitter.fire(`\r\n${fileName}\r\n`);
-                            writeEmitter.fire(`${fileChanges[fileName]}\r\n`);
-                        }
-                    };
+                    if(fileChanges) {
+                        const changedFileNames = Object.keys(fileChanges);
+                        if (changedFileNames && changedFileNames.length > 0) {
+                            if (performUpdates) writeEmitter.fire(`\r\nperformed ${changedFileNames.length} file updates:\r\n`);
+                            else writeEmitter.fire(`\r\suggesting ${changedFileNames.length} file updates:\r\n`);
+                            for (const fileName of changedFileNames) {
+                                writeEmitter.fire(`\r\n${fileName}\r\n`);
+                                writeEmitter.fire(`${fileChanges[fileName]}\r\n`);
+                            }
+                        };
+                    }
                     working = false;
                     line = '';
                     summaryInfo();
