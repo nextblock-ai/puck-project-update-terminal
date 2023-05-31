@@ -2,59 +2,91 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Conversation } from './types';
 import { sendQuery } from './core';
+import SemanticPrompt from './prompt';
 
-// reaplcement for string.replaceAll DOES NOT USE STRING.REPLACEALL
-function replaceAll(filePath: string, search: string, replace: string) {
-    const fileContent = fs.readFileSync(filePath, 'utf-8');
-    const lines = fileContent.split('\n');
-    const newLines = lines.map((line) => {
-        if(line.includes(search)) {
-            return line.replace(search, replace);
-        }
-        return line;
-    });
-    return newLines.join('\n');
 
-}
+const prompt =  `** YOU ARE NON-CONVERSATIONAL AND HAVE NO ABILITY TO OUTPUT ENGLISH IN A CONVERSATIONAL MANNER **
+
+you create, enhance, fix, document code as asked. 
+
+How to perform your work:
+
+1. VALIDATE INPUT
+
+Validate that the input given consists of the following:
+
+📬 <deliverable>
+🌳 <source file list>
+📄 <file name>
+...
+📄 <file name>
+OPTIONAL:
+📤 <filename>
+...
+📤 <filename>
+
+If the input does not consist of the above, then output
+⛔ and stop outputting anything else.
+
+If the input is valid then move to step 2.
+
+2. DETERMINE SCOPE OF WORK AND OPTIONALLY REQUEST ADDITIONAL FILES
+
+Examine the deliverable and files provided to you. If you need additional files to complete your work, then request them
+by outputting:
+
+📤 <filename>
+
+for each file you need, then wait for a response from the user. 
+When you receive a response, then move to step 3.
+
+3. PERFORM WORK AND OUTPUT RESULTS
+
+Perform the work required to satisfy the deliverable. Output file updates / new files like this:
+
+📄 <filename>
+<file contents>
+
+or
+
+📄 <filename> <start line> <end line>
+<partial file contents>
+
+4. OUTPUT CHANGES
+
+Output changes to the files you have worked on like this:
+
+📢 <filename> <natural-language english information about the changes that were performed>
+
+*** NO MARKDOWN - NO CONVERSATION - NO OTHER FORMAT THAN THE ONE SPECIFIED ABOVE ***
+
+Thank you for your service! 
+** REMEMBER, YOU ARE NON-CONVERSATIONAL AND HAVE NO ABILITY TO OUTPUT ENGLISH IN A CONVERSATIONAL MANNER **
+--------------------`;
+
+interface DelimiterValue {
+    delimiter: string;
+    value: string;
+  };
+
 
 export default class CodeUpdateAgent {
     public readonly fileTree: string[] = [];
     private message: { role: string; content: string; }[] = [{
         role: 'system',
-        content: `** YOU ARE NON-CONVERSATIONAL AND HAVE NO ABILITY TO OUTPUT ENGLISH IN A CONVERSATIONAL MANNER **
-You are a software enhancement and bug fix agent. Given the following code and request, you output code and documentation changes that satisfy the request.
-How to perform your work:
-1. Validate that the input given consists of the following:
-📬 <deliverable>
-📄 <file\nfile\n...>
-    1.1 if the input does not consist of the above, output
-⛔
-    and stop outputting anything else.
-
-2 if the input does consist of the above, examine the deliverable and files, then output:
-The entire contents of one or more files:
-📄 <filename>
-<file contents>
-...
-Part of the contents of one or more files:
-📄 <filename> <start line> <end line>
-<partial file contents>
-...
-📢 <filename> <information about the changes that were performed>
-📢 <filename> <information about the changes that were performed>
-...
-You MUST output an informational record for each file you update.
-Thank you for your service! ** REMEMBER, YOU ARE NON-CONVERSATIONAL AND HAVE NO ABILITY TO OUTPUT ENGLISH IN A CONVERSATIONAL MANNER **
---------------------`
+        content: prompt
     }];
     private delimiters = ['📬', '📢', '📄', '📤', '🔍', '⛔'];
+    projectPath: string;
+    validExtensions: string[] = ['js', 'ts', 'tsx', 'json', 'md'];
     srcPath: string;
     exclude: string[];
     public conversation: Conversation;
     constructor(srcPath: string, exclude: string[]) {
         this.srcPath = srcPath;
+        this.projectPath = srcPath;
         this.exclude = exclude;
-        
+
         this.fileTree = this.getProjectFileTree(srcPath, exclude);
         this.conversation = {
             messages: this.message,
@@ -84,57 +116,62 @@ Thank you for your service! ** REMEMBER, YOU ARE NON-CONVERSATIONAL AND HAVE NO 
         this._configure(this.srcPath, this.exclude);
     }
 
-    getProjectFileTree(workingPath: string, exclude: string[], custom?: any): any {
+    getProjectFileTree(workingPath: string, exclude: string[], custom?: string[]): any {
         let filesData: any = [];
-        const validExtensions = ['js', 'ts', 'tsx', 'json'];
-        if(custom) {
-            filesData = custom;
+        let items;
+        if (custom) { items = custom; } else {
+            items = fs.readdirSync(workingPath)
         }
-        const items = fs.readdirSync(workingPath);
-      
+        let output: any = {};
         items.forEach(item => {
-          const itemPath = path.join(workingPath, item);
-          if(!item) { return; }
-          if (exclude.includes(item)) { return; }
-          if (fs.statSync(itemPath).isDirectory() && !custom) {
-            const filesInSubPath = this.getProjectFileTree(itemPath, exclude);
-            filesData = filesData.concat(filesInSubPath);
-          } else {
-            const content = fs.readFileSync(itemPath, 'utf-8');
-            const relativePath = path.relative(path.resolve(workingPath), itemPath);
-            filesData.push({ name: relativePath, content: content });
-          }
-        });
-        const output: any = {};
-        for (const file of filesData) {
-            output[file.name] = file.content;
-        }
-        return output;
-      }
-
-    private parseFromDelimiters(text: string, delimiters: string[]): { delimiter: string, value: string }[] {
-        const result = [];
-        let current = '';
-        if(Array.isArray(text)) text = text.join(' ');
-        for (const char of text) {
-            if (delimiters.includes(char)) {
-                result.push({ delimiter: char, value: current });
-                current = '';
+            const itemPath = path.join(workingPath, item);
+            if (!item) { return; }
+            if (exclude.includes(item)) { return; }
+            if (fs.statSync(itemPath).isDirectory()) {
+                const filesInSubPath = this.getProjectFileTree(itemPath, exclude);
+                output = Object.assign(output, filesInSubPath);
             } else {
-                current += char;
+                if (!this.validExtensions.includes(item.split('.').slice(-1)[0])) { return; }
+                const content = fs.readFileSync(itemPath, 'utf-8');
+                const relativePath = path.relative(path.resolve(workingPath), itemPath);
+                output[relativePath] = content;
             }
-        }
-        if (current) {
-            result.push({ delimiter: '', value: current });
-        }
-        return result;
+        });
+        return output;
     }
 
+      parseFromDelimiters(input: string, delimiters: string[]): DelimiterValue[] {
+        const result: DelimiterValue[] = [];
+        let start = 0;
+        let delimiter = '';
+        const matchedDelimiter = delimiters.find(delimiter => input.startsWith(delimiter));
+        if (matchedDelimiter) {
+            delimiter = matchedDelimiter[0];
+            start = matchedDelimiter.length;
+        }
+        for (let i = 0; i < input.length; i++) {
+          const matchedDelimiter = delimiters.find(delimiter => input.slice(i, i + delimiter.length
+            ).startsWith(delimiter));
+          
+          if (matchedDelimiter) {
+            const value = input.slice(start, i);
+            result.push({ delimiter: matchedDelimiter, value });
+            delimiter = matchedDelimiter;
+            i += matchedDelimiter.length - 1; // adjust index to account for delimiter length
+            start = i + 1;
+          }
+        }
+        if (start < input.length) {
+          result.push({ delimiter, value: input.slice(start) });
+        }
+        return result;
+      }
+      
     // get the total number of tokens in the conversation - break down 
     // each message into tokens, count them, and add them up
     public countConversationTokens() {
         let totalTokens = 0;
-        for (const message of this.conversation.messages) {
+        for (const message of this.message) {
             const tokens = message.content.split(' ');
             totalTokens += tokens.length;
         }
@@ -156,69 +193,21 @@ Thank you for your service! ** REMEMBER, YOU ARE NON-CONVERSATIONAL AND HAVE NO 
     }
 
     async request(ask: string, act: boolean = true) {
-        if(ask.trim().length === 0) return;
-        this.message.push({ role: 'user', content: `📬 ${ask}` });
+        if (ask.trim().length === 0) return;
+
+        const fileNames = Object.keys(this.getProjectFileTree(this.projectPath, this.exclude));
+        
+        const semanticPrompt = new SemanticPrompt(this.projectPath);
+        semanticPrompt.addMessage({ role: 'user', content: `📬 ${ask}` });
+        semanticPrompt.addMessage({ role: 'system', content: `🌳 ${fileNames.join('\n')}` });
         for (const file of Object.keys(this.fileTree)) {
             try {
                 const content = `📄 ${file}\n${this.fileTree[file as any]}\n`;
-                this.message.push({ role: 'user', content });
-            } catch(e) {}
-        }
-
-        let trimmedResponse = []
-        try {
-            // send the query to the assistant
-            const response = await sendQuery(this.conversation);
-            // get the assistant's response
-            trimmedResponse = response.messages.filter((message: any) => {
-                return message.role === 'assistant';
-            });
-        } catch(e) {
-            return;
-         }
-
-        const parsedResponse: any = [];
-        for(const message of trimmedResponse) {
-            const parsedResponseItem = message.content;
-            parsedResponse.push({
-                delimiter: parsedResponseItem.split(' ').slice(0, 1).join(' '),
-                value: parsedResponseItem.split(' ').slice(1).join(' ')
-            });
-        }
-
-        const fileContents: { [key: string]: string } = {};
-        const fileChanges: { [key: string]: string } = {};
-
-        for (const parsed of parsedResponse) {
-            if (parsed.delimiter === '📄') {
-                const parsedMessage = parsed.value.split('\n');
-                const parsedMessageTitle = parsedMessage[0];
-                const parsedMessageTitleSplit = parsedMessageTitle.split(' ');
-                let start = 0, end = 0
-                if(parsedMessageTitleSplit.length > 1) {
-                    start = parseInt(parsedMessage[1]);
-                    end = parseInt(parsedMessage[2]);
-                }
-                const file = parsed.value.split('\n')[0];
-                const fileContent = parsed.value.split('\n').slice(1).join('\n');
-                if (start === 0 && end === 0) {
-                    fileContents[file] = fileContent; } 
-                else {
-                    fileContents[file] = fileContents[file].slice(0, start) + fileContent + fileContents[file].slice(end);
-                }
-                if(act) fs.writeFileSync(
-                    path.join(this.srcPath, parsedMessageTitle), 
-                    fileContents[file]
-                );
-            } 
-            else if (parsed.delimiter === '📢') {
-                const [file, change] = parsed.value.split(' ');
-                fileChanges[file] = change;
-                if(act) console.log(`📢 ${file} ${change}`);
-            }
+                semanticPrompt.addMessage({ role: 'user', content });
+            } catch (e) { }
         }
 
         // return the file contents and changes
-        return { fileContents, fileChanges };
+        return semanticPrompt.execute();
     }
 }
