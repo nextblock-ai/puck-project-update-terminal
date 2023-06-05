@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import CodeUpdateAgent from './code-update-agent';
+import SemanticPrompt from './prompt';
+import { getSemanticAgent } from './core';
+import { CodeUpdateAgent } from './code-update-agent';
 
 class AnimatedTerminalBar {
     public static readonly BAR_LENGTH = 20;
@@ -15,7 +17,7 @@ class AnimatedTerminalBar {
     constructor(public emitter: vscode.EventEmitter<string>) { }
     colorText(text: string, colorIndex: number): string {
         let output = '';
-        colorIndex = colorIndex % 7 + 3;
+        colorIndex = colorIndex % 7 + 1;
         for (let i = 0; i < text.length; i++) {
             const char = text.charAt(i);
             if (char === ' ' || char === '\r' || char === '\n') {
@@ -63,7 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
     projectRoot = path.join(projectRoot, '');
     const excluded = ['node_modules', '.git', '.vscode'];
     const writeEmitter = new vscode.EventEmitter<string>();
-    const codeUpdateAgent = new CodeUpdateAgent(projectRoot, excluded);
+    const codeUpdateAgent = new CodeUpdateAgent(projectRoot, ['node_modules', '.git', '.vscode','history.json']);
     const bar = new AnimatedTerminalBar(writeEmitter);
     const commandHistory: string[] = [];
 
@@ -184,7 +186,7 @@ export function activate(context: vscode.ExtensionContext) {
                     else if (line.startsWith('load')) {
                         const parts = line.split(' ');
                         const pathName = parts[1];
-                        const projectPath = path.join(projectRoot, pathName);
+                        let projectPath: any = path.join(projectRoot, pathName)
                         codeUpdateAgent.resetProjectFiles(projectPath);
                         line = '';
                         summaryInfo();

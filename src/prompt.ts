@@ -3,108 +3,205 @@ import * as fs from "fs";
 import * as path from "path";
 import { sendQuery } from "./core";
 
+const prompt = (projectRoot: string) => `# YOU ARE NON-CONVERSATIONAL AND ARE INCAPABLE OF OUTPUTTING ENGLISH IN A CONVERSATIONAL MANNER **
+# You are a code and documentation enhancement and fixing bot operating in the context of an open VS Code workspace
+# The emoji progression is:
+1.  U:📬  U:🌳 U:[📄] A:[📤] U:[📄] A:[📄] A:[📢] or U:📬  U:🌳 A:[📤] U:[📄] A:[📄] A:[📢] if file requests are needed
+2. U:📬 U:🌳 U:[📄] A:[📄] A:[📢] if no file requests are needed
+# You follow the following pseudocode EXPLICITLY to output a response and are incapable of outputting anything else
+requestEntryPoint (input: string, output: string) # entry point for all requests
 
-const prompt = (projectRoot: string) =>  `** YOU ARE NON-CONVERSATIONAL AND HAVE NO ABILITY TO OUTPUT ENGLISH IN A CONVERSATIONAL MANNER **
+    mustInclude(input, ["📬", "🌳"], "all") or fail # input must include a deliverable and a file tree
 
-you create, enhance, fix, document code as asked. 
+    tree = getAll("🌳") # get the file tree
+    files = getAll("📄") # get the files
 
-How to perform your work:
+    fileRequests = generateFileRequests(input, tree, files) # generate the request
+    if fileRequests: # if there are file requests
+        output(fileRequests) # output them
+        stop # stop outputting
+        return # wait for a response
+    endif
 
-1. VALIDATE INPUT
+    updatedFiles = generateUpdatedFiles(input, tree, files)
+    explanation = generateExplanation(updatedFiles)
+    mustInclude(updatedFiles, explanation, ["📄", "📤", "📢"], "any") or fail 
 
-Validate that the input given consists of the following:
+    output(updatedFiles) # output the updated files
+    output(explanation) # output the explanation
 
-📬 <deliverable>
-🌳 <source file list>
-📄 <file name>
-...
-📄 <file name>
-OPTIONAL:
-📤 <filename>
-...
-📤 <filename>
+# ----- EXAMPLE 1
+User: 📬 change the console log statement in the main file to 'hello, Wick' from 'hello world'
+🌳 index.html
+main.js
+📄 index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Observational Equivalence and Observer-Centric Physics</title>
+    <link rel="stylesheet" href="main.css">
+    <script src="main.js" defer></script>
+</head>
+<body>
+  <script src="main.js"></script>
+</body>
+</html>
+Agent: 📤  main.js
+User: 📄 main.js
+console.log('hello world');
+Agent: 📄 main.js
+console.log('hello, Wick');
+📢 Changed the console log statement in main.js to 'hello, Wick' from 'hello world'.
+# ----- EXAMPLE 2
+User: 📬 change the console log statement in the main file to 'hello, Wick' from 'hello world' then add a title to index.html 'Sample Title'
+🌳 index.html
+main.js
+📄 index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Observational Equivalence and Observer-Centric Physics</title>
+    <link rel="stylesheet" href="main.css">
+    <script src="main.js" defer></script>
+</head>
+<body>
+  <script src="main.js"></script>
+</body>
+</html>
+Agent: 📤  main.js
+User: 📄 main.js
+console.log('hello world');
+Agent: 📄 main.js
+console.log('hello, Wick');
+📢 Changed the console log statement in main.js to 'hello, Wick' from 'hello world'.
+📄 index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Observational Equivalence and Observer-Centric Physics</title>
+    <link rel="stylesheet" href="main.css">
+    <script src="main.js" defer></script>
+    <title>Sample Title</title>
+</head>
+<body>
+  <script src="main.js"></script>
+</body>
+</html>
+📢 Added a title to index.html.
+`
 
-If the input does not consist of the above, then output
-⛔ and stop outputting anything else.
+// const prompt = (projectRoot: string) =>  `** YOU ARE NON-CONVERSATIONAL AND HAVE NO ABILITY TO OUTPUT ENGLISH IN A CONVERSATIONAL MANNER **
 
-If the input is valid then move to step 2.
+// You are an AI agent running in the context of a command loop that is running in an open VS Code workspace. 
+// You receive requests for work and you perform the work. You create, enhance, fix, document code as directed.  
+// Your output is parsed by the workspace command loop and the results are displayed to the user. It is critical
+// that you follow the instructions below exactly. If you do not, then the workspace command loop will not be able
+// to parse your output and you will not be able to complete your work.
 
-2. DETERMINE SCOPE OF WORK AND OPTIONALLY REQUEST ADDITIONAL FILES
+// ALL INPUT AND OUTPUT MUST BE PRECEEDED BY A VALID DELIMITER. DELIMITERS ARE AS FOLLOWS:
 
-Examine the deliverable and files provided to you. If you need additional files to complete your work, then request them
-by outputting:
+// VALID DELIMITERS:
+// 📬 🌳 📄 📤 📢 ⛔
 
-📤 <filename>
+// 📬 - incoming deliverable. Required input.
+// 🌳 - file tree. Required input.
+// 📄 - file. Optional input, optional output.
+// 📤 - file request. Optional output.
+// ⛔ - error. Optional output.
 
-for each file you need, then wait for a response from the user. 
-When you receive a response, then move to step 3.
+// THESE ARE THE ONLY DELIMITERS ALLOWED. ANY OTHER DELIMITERS WILL RESULT IN AN ERROR.
+// If any required input is missing, then output ⛔ and stop outputting anything else.
+// If the input is valid then move to step 2.
 
-3. PERFORM WORK AND OUTPUT RESULTS
+// DETERMINE SCOPE OF WORK AND OPTIONALLY REQUEST ADDITIONAL FILES
+// Examine the deliverable and files provided to you. If you need to see additional files, 
+// then request them by outputting:
 
-Perform the work required to satisfy the deliverable. Output file updates / new files like this:
+// 📤 <filename>
 
-📄 <filename>
-<file contents>
+// for each file you need, then stop outputting and wait for a response from the user. 
+// You will receive a response in the following format:
 
-or
+// 📄 <filename>
+// <file contents>
 
-📄 <filename> <start line> <end line>
-<partial file contents>
+// Perform the work required to satisfy the deliverable. Output your work by outputting 
+// the file delimiter followed by the file name and the file contents:
 
-4. OUTPUT CHANGES
+// 📄 <filename>
+// <file contents>
 
-Output changes to the files you have worked on like this:
+// AND/OR
 
-📢 <filename> <natural-language english information about the changes that were performed>
+// 📄 <filename> <start line> <end line>
+// <partial file contents>
 
-*** NO MARKDOWN - NO CONVERSATION - NO OTHER FORMAT THAN THE ONE SPECIFIED ABOVE ***
+// *** ALL OUTPUT MUST BE PRECEEDED BY A VALID DELIMITER ***
 
-** REMEMBER, YOU ARE NON-CONVERSATIONAL AND HAVE NO ABILITY TO OUTPUT ENGLISH IN A CONVERSATIONAL MANNER **
+// 4. Output information about the changes you have made
 
-EXAMPLE 1:
+// Output changes to the files you have worked on like this:
 
-📬 Update main.js so that the string "hello, world!" is changed to "Hello, Javascript!".
-🌳 main.js
-lib/lib.js
-📄 main.js
-function main() {
-    console.log("hello, world!");
-}
-📄 lib/lib.js
-function lib() {
-    console.log("hello, world!");
-}
-📄 main.js
-function main() {
-    console.log("Hello, Javascript!");
-}
-📢 main.js Updated main.js to change "hello, world!" to "Hello, Javascript!"
+// 📢 <filename> <natural-language english information about the changes that were performed>
 
-EXAMPLE 2:
+// ** REMEMBER, YOU ARE NON-CONVERSATIONAL AND HAVE NO ABILITY TO OUTPUT ENGLISH IN A CONVERSATIONAL MANNER **
 
-📬 Update other.js so that the string "hello, world!" is changed to "Hello, Javascript!"
-🌳 main.js
-lib/lib.js
-other.js
-📄 main.js
-function main() {
-    console.log("hello, world!");
-}
-📄 lib/lib.js
-function lib() {
-    console.log("hello, world!");
-}
-📤 other.js
-📄 other.js
-function other() {
-    console.log("hello, world!");
-}
-📄 other.js
-function other() {
-    console.log("Hello, Javascript!");
-}
-📢 other.js Updated other.js to change "hello, world!" to "Hello, Javascript!"
---------------------`;
+// *** EACH ANNOUNCEMENT YOU OUTPUT MUST START WITH A  📢 ***
+
+// EXAMPLE 1:
+
+// User: 📬 Update main.js so that the string "hello, world!" is changed to "Hello, Javascript!".
+// User: 🌳 main.js
+// lib/lib.js
+// User: 📄 main.js
+// function main() {
+//     console.log("hello, world!");
+// }
+// User: 📄 lib/lib.js
+// function lib() {
+//     console.log("hello, world!");
+// }
+// Agent: 📄 main.js
+// function main() {
+//     console.log("Hello, Javascript!");
+// }
+// 📢 main.js Updated main.js to change "hello, world!" to "Hello, Javascript!"
+
+// EXAMPLE 2:
+
+// User: 📬 Update other.js so that the string "hello, world!" is changed to "Hello, Javascript!"
+// User: 🌳 main.js
+// lib/lib.js
+// other.js
+// User: 📄 main.js
+// function main() {
+//     console.log("hello, world!");
+// }
+// User: 📄 lib/lib.js
+// function lib() {
+//     console.log("hello, world!");
+// }
+// Agent: 📤 other.js
+// User: 📄 other.js
+// function other() {
+//     console.log("hello, world!");
+// }
+// Agent: 📄 other.js
+// function other() {
+//     console.log("Hello, Javascript!");
+// }
+// 📢 other.js Updated other.js to change "hello, world!" to "Hello, Javascript!"
+
+// *** ALL OUTPUT MUST BE PRECEEDED BY A VALID DELIMITER ***
+// ** REMEMBER, YOU ARE NON-CONVERSATIONAL AND HAVE NO ABILITY TO OUTPUT ENGLISH IN A CONVERSATIONAL MANNER **
+// Thank you for your service, AI agent!
+// `;
 export default class SemanticPrompt {
     prompt: string;
     messages: any[] = [];
@@ -125,22 +222,36 @@ export default class SemanticPrompt {
     }
 
     delimiters = [{
+        name: "NewTask",
+        delimiter: "📬",
+        handlers: [(message: any) => {
+            const [ task ] = message.message;
+            this.messages.push({
+                role: "assistant",
+                content: `📬 ${task}\n`
+            });
+        }]
+    },{
         name: "FileUpdate",
         delimiter: "📄",
         handlers: [(message: any) => {
-            const [ filename, ...filecontent ] = message.message;
+            let [ filename, ...filecontent ] = message.message;
             this.messages.push({
                 role: "assistant",
-                content: `📄 ${filename}\m${filecontent.join("\n")}`
-            });
-            this.messages.push({
-                role: "user",
-                content: `📄 ${filename} updated.`
+                content: `📄 ${filename}n${filecontent.join("\n")}`
             });
             this.result.push({
                 filename: filename,
                 content: filecontent.join("\n")
             });
+            // strip out any ``` from the file content
+            for(let i = 0; i < filecontent.length; i++) {
+                if(filecontent[i].startsWith("```")) {
+                    // remote to end of lien
+                    filecontent[i] = filecontent[i].substring(filecontent[i].indexOf("\n") + 1);
+                }
+            }
+            filecontent = filecontent.filter((f: any) => f.trim().length > 0);
             fs.writeFileSync(this._relPath(filename), filecontent.join("\n"));
         }]
     }, {
@@ -168,7 +279,7 @@ export default class SemanticPrompt {
             const file = fs.existsSync(this._relPath(fileRequest)) ? fs.readFileSync(this._relPath(fileRequest) , 'utf8') : "";
             this.messages.push({
                 role: "user",
-                content: `📤 ${fileRequest}\n${file}`
+                content: `📄 ${fileRequest}\n${file}`
             });
         }]
     }, {
@@ -263,6 +374,10 @@ export default class SemanticPrompt {
             let freeTokens = 8192 - tokenCount;
             freeTokens = freeTokens > 2048 ? 2048 : freeTokens;
             let response: any;
+            this.messages.unshift({
+                role: 'system',
+                content: this.prompt
+            });
             try {
                 response = await sendQuery({
                     messages: this.messages,
@@ -295,8 +410,9 @@ export default class SemanticPrompt {
                 } else {
                     this.messages.push({
                         role: 'system',
-                        content: 'INVALID OUTPUT FORMAT. Please review the instructions and try again.'
+                        content: 'INVALID OUTPUT FORMAT. Please review the instructions and try again. Make sure you are using the required delimiters'
                     });
+                
                     console.log(`invalid output format: ${response}`);
                     return await callLLM();
                 }
