@@ -193,6 +193,15 @@ export function activate(context: vscode.ExtensionContext) {
                         prompt();
                         return;
                     }
+                    else if (line.startsWith('preload')) {  // preload on/off
+                        const parts = line.split(' ');
+                        const value = parts[1];
+                        codeUpdateAgent.preload = value === 'on';
+                        line = '';
+                        summaryInfo();
+                        prompt();
+                        return;
+                    }
                     else if (line.startsWith('add')) {
                         const parts = line.split(' ');
                         if(parts.length < 2) {

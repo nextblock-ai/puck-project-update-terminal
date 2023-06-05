@@ -17,6 +17,7 @@ export class CodeUpdateAgent extends SemanticPrompt {
     validExtensions: string[] = ['js', 'ts', 'tsx', 'json', 'html', 'css', 'md'];
     exclude: string[];
     conversation: Conversation;
+    preload = false;
 
     constructor(srcPath: string, exclude: string[]) {
         super(srcPath);
@@ -88,18 +89,18 @@ export class CodeUpdateAgent extends SemanticPrompt {
     async request(ask: string, act: boolean = true) {
         if (ask.trim().length === 0) return;
 
-        const fileNames = Object.keys(this.getProjectFileTree(this.projectPath, this.exclude));
-
         const semanticPrompt = new SemanticPrompt(this.projectPath);
+        const fileNames = Object.keys(this.getProjectFileTree(this.projectPath, this.exclude));
         semanticPrompt.addMessage({ role: 'user', content: `📬 ${ask}` });
         semanticPrompt.addMessage({ role: 'user', content: `🌳 ${fileNames.join('\n')}` });
-        for (const file of Object.keys(this.fileTree)) {
-            try {
-                const content = `📄 ${file}\n${this.fileTree[file as any]}\n`;
-                semanticPrompt.addMessage({ role: 'user', content });
-            } catch (e) { }
+        if(this.preload) {
+            for (const file of Object.keys(this.fileTree)) {
+                try {
+                    const content = `📄 ${file}\n${this.fileTree[file as any]}\n`;
+                    semanticPrompt.addMessage({ role: 'user', content });
+                } catch (e) { }
+            }        
         }
-
         // return the file contents and changes
         return semanticPrompt.execute();
     }

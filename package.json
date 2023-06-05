@@ -11,7 +11,7 @@
   "extensionDependencies": [
     "NextBlock.puck-core"
   ],
-  "version": "0.0.6",
+  "version": "0.0.7",
   "engines": {
     "vscode": "^1.78.0"
   },
